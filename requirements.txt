@@ -1,0 +1,9 @@
+pydicom
+pandas
+numpy
+torch
+torchvision
+tqdm
+pynrrd
+torchio
+unet
