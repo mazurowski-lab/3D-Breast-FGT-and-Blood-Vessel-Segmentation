@@ -6,6 +6,8 @@ Breast density, or the amount of fibroglandular tissue (FGT) present relative to
 
 Dense tissue and FGT are used interchangeably throughout the documentation. 
 
+![gifexample1](readme_images/breast_seg_example.gif)
+
 ## Prerequisites
 
 The code contained in this repository can be run using Python 3 with the dependencies listed in the `requirements.txt` file
