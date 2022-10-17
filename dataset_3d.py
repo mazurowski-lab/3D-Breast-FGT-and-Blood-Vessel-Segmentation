@@ -29,7 +29,8 @@ class _Dataset3DBase(Dataset):
         mask_dir,
         additional_input_dir = None,
         transforms = None,
-        one_hot_mask = False
+        one_hot_mask = False,
+        image_only = False
     ):
         """
         This class converts 3D MRI volumes and segmentations into a 3D dataset.
@@ -45,6 +46,7 @@ class _Dataset3DBase(Dataset):
             structure. 
         mask_dir: str
             Path that leads to directory with masks with same structure
+            Set this to None if using image_only
         transforms: torchio.transforms.Transform
             Transforms to apply
         additional_input_dir: str
@@ -52,11 +54,15 @@ class _Dataset3DBase(Dataset):
             used as an additional channel in the input
         one_hot_mask: bool
             Will one hot encode masks for multi-class tasks. 
+        image_only: bool
+            The dataset will be created without true masks. This is used for
+            predictions
 
         """
 
         self.transforms = transforms
         self.one_hot_mask = one_hot_mask
+        self.image_only = image_only
 
         # To improve efficiency of dataset, all of the data will be loaded
         # into RAM. Otherwise it would be more complicated to load each
@@ -64,11 +70,13 @@ class _Dataset3DBase(Dataset):
         # continually reload dicom and nrrd data. 
 
         image_dir = Path(image_dir)
-        mask_dir = Path(mask_dir)
 
         # Load images/masks; not stacked due to different dim for each volume
         self.image_array_list = []
-        self.mask_array_list = []
+        
+        if not self.image_only:
+            mask_dir = Path(mask_dir)
+            self.mask_array_list = []
 
         if additional_input_dir:
             additional_input_dir = Path(additional_input_dir)
@@ -87,12 +95,13 @@ class _Dataset3DBase(Dataset):
             image_array = np.load(image_dir / '{}.npy'.format(subject_id))
             self.image_array_list.append(image_array)
 
-            mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))
-            self.mask_array_list.append(mask_array)
+            if not self.image_only:
+                mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))
+                self.mask_array_list.append(mask_array)
 
-            assert image_array.shape == mask_array.shape, \
-                'Image array and mask array shape do not match: {}, {}'\
-                    .format(image_array.shape, mask_array.shape)
+                assert image_array.shape == mask_array.shape, \
+                    'Image array and mask array shape do not match: {}, {}'\
+                        .format(image_array.shape, mask_array.shape)
 
             if additional_input_dir:
                 additional_input_array = np.load(
@@ -127,6 +136,25 @@ class _Dataset3DBase(Dataset):
             ], 
             axis=0
         )
+        image_array = torch.from_numpy(image_array)
+
+        if self.image_only and not hasattr(self, 'additional_input_list'):
+            return image_array
+            
+        elif self.image_only and hasattr(self, 'additional_input_list'):
+            additional_input_array = np.expand_dims(
+                self.additional_input_list[list_index][
+                    x_index:x_index + self.input_dim,
+                    y_index:y_index + self.input_dim,
+                    z_index:z_index + self.input_dim
+                ], 
+                axis=0
+            )
+            additional_input_array = torch.from_numpy(additional_input_array)
+            image_array = torch.cat((image_array, additional_input_array))
+
+            return image_array
+
         mask_array = np.expand_dims(
             self.mask_array_list[list_index][
                 x_index:x_index + self.input_dim,
@@ -135,8 +163,6 @@ class _Dataset3DBase(Dataset):
             ], 
             axis=0
         )
-
-        image_array = torch.from_numpy(image_array)
         mask_array = torch.from_numpy(mask_array.copy())
 
         if hasattr(self, 'additional_input_list'):
@@ -159,7 +185,8 @@ class _Dataset3DBase(Dataset):
 def transform_using_torchio(
     image,
     mask,
-    transforms
+    transforms,
+    image_only = False
 ):
     """
     Uses a TorchIO subject to perform transforms. TorchIO has a lot of 
@@ -194,6 +221,41 @@ def transform_using_torchio(
         'image': transformed_subject.image[tio.DATA].float(),
         'mask': transformed_subject.mask[tio.DATA].float()
     }
+
+def transform_using_torchio_image_only(
+    image,
+    transforms
+):
+    """
+    Uses a TorchIO subject to perform transforms. TorchIO has a lot of 
+    powerful transforms that can be used, but required subject class to apply
+    transforms consistently (and easily) to images and mask
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        Image data, can be multiple channels
+    transforms: torchio.transforms.Transform
+        Transforms to apply
+
+    Returns
+    -------
+    dict
+        A dictionary with image and mask keys that contain corresponding
+        images and masks after transforms. 
+
+    """
+
+    subject = tio.Subject(
+        image = tio.ScalarImage(tensor = image)
+    )
+
+    transformed_subject = transforms(subject)
+
+    return {
+        'image': transformed_subject.image[tio.DATA].float()
+    }
+
 
 def convert_to_one_hot(
     mask
@@ -231,6 +293,10 @@ class Dataset3DSimple(_Dataset3DBase):
 
         # Get image and mask array based on indicies 
         image_array = np.expand_dims(self.image_array_list[i], axis=0)
+
+        if self.image_only:
+            return transform_using_torchio_image_only(image_array, self.transforms)
+
         mask_array = np.expand_dims(self.mask_array_list[i], axis=0)
 
         if self.one_hot_mask:
@@ -422,7 +488,8 @@ class Dataset3DDivided(_Dataset3DBase):
         z_division,
         additional_input_dir = None,
         transforms = None,
-        one_hot_mask = False
+        one_hot_mask = False,
+        image_only = False
     ):
         """
         This class samples the full volume by sample an equal number of times
@@ -444,7 +511,8 @@ class Dataset3DDivided(_Dataset3DBase):
             mask_dir = mask_dir,
             additional_input_dir = additional_input_dir,
             transforms = transforms,
-            one_hot_mask = one_hot_mask
+            one_hot_mask = one_hot_mask,
+            image_only = image_only
         )
 
         self.input_dim = input_dim
@@ -467,11 +535,18 @@ class Dataset3DDivided(_Dataset3DBase):
         list_index, box_index = self.box_indicies_dict[i]
         x_index, y_index, z_index = box_index
 
-        image_array, mask_array = self.get_image_mask_using_indicies(
-            list_index, x_index, y_index, z_index
-        )
+        if self.image_only:
+            image_array = self.get_image_mask_using_indicies(
+                list_index, x_index, y_index, z_index
+            )
 
-        return transform_using_torchio(image_array, mask_array, self.transforms)
+            return transform_using_torchio_image_only(image_array, self.transforms)
+        else:
+            image_array, mask_array = self.get_image_mask_using_indicies(
+                list_index, x_index, y_index, z_index
+            )
+
+            return transform_using_torchio(image_array, mask_array, self.transforms)
 
 def generate_stack_dict(
     z_input_dim,
