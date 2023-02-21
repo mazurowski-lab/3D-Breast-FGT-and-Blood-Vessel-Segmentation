@@ -738,16 +738,17 @@ def pred_and_save_masks_3d_simple(
     print('Predicting Masks...')
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
 
-        current_subject = dataset.subject_id_list[i]
+        current_subject = dataset.subject_id_list[0]
         # Make an empty array that will be filled in the correct area with preds
-        x_length, y_length, z_length = dataset.image_shape_list[i]
+        x_length, y_length, z_length = dataset.image_shape_list[0]
 
         # Get preds
         image = batch['image']
-        # mask = batch['mask']
-
         image = image.to(device, dtype=torch.float32)
-        # mask = mask.to(device, dtype=torch.float32)
+
+        mask = batch.get('mask')
+        if mask is not None:
+            mask = mask.to(device, dtype=torch.float32)
 
         with torch.no_grad():
             pred = unet(image)
@@ -769,7 +770,7 @@ def pred_and_save_masks_3d_simple(
 
         # Save the array; we'll keep the raw values
         np.save(
-            save_masks_dir / '{}.npy'.format(current_subject), 
+            save_masks_dir / '{}.npy'.format(current_subject),
             pred
         )
 

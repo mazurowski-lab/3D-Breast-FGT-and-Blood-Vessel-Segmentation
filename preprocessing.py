@@ -175,8 +175,48 @@ def read_precontrast_mri_and_segmentation(
         Segmentation data from .nrrd.seg file after proper orientation
 
     """
+    tcia_data_dir = Path(tcia_data_dir)
     segmentation_dir = Path(segmentation_dir)
 
+    # Get the sequence dir from the DataFrame
+    sequence_dir = fpath_mapping_df.loc[
+        fpath_mapping_df['subject_id'] == subject_id, 'precontrast_dir'
+    ].iloc[0]
+
+    # There's also a subdir for every subject that contains the sequences
+    # There is only one of these
+    sub_dir = os.listdir(tcia_data_dir / subject_id)[0]
+
+    full_sequence_dir = tcia_data_dir / subject_id / sub_dir / sequence_dir
+
+    # Now we can iterate through the files in the sequence dir and reach each
+    # of them into a numpy array
+    dicom_file_list = sorted(os.listdir(full_sequence_dir))
+    dicom_data_list = []
+
+    # Saving the values of first two image positions
+    # This is used to orient inferior to superior
+    first_image_position = 0
+    second_image_position = 0
+
+    for i in range(len(dicom_file_list)):
+        dicom_data = pydicom.dcmread(full_sequence_dir / dicom_file_list[i])
+
+        if i == 0:
+            first_image_position = dicom_data[0x20, 0x32].value[-1]
+        elif i == 1:
+            second_image_position = dicom_data[0x20, 0x32].value[-1]
+
+        dicom_data_list.append(dicom_data.pixel_array)
+
+    # Stack in numpy array
+    image_array = np.stack(dicom_data_list, axis=-1)
+
+    # Read in breast_nrrd data
+    nrrd_breast_data, _ = nrrd.read(
+        segmentation_dir / '{}/Segmentation_{}_Breast.seg.nrrd'.format(
+            subject_id, subject_id)
+    )
 
     # Read in dense_and_vessels (abbreviated dv) data
     # Header is used to properly write classes
@@ -268,13 +308,6 @@ def read_precontrast_mri_and_segmentation(
     assert (np.unique(nrrd_dv_data) == np.array([0, 1, 2])).all(), \
         "{} dense/vessel array has incorrect values".format(subject_id)
 
-    # Read in breast_nrrd data
-    nrrd_breast_data, _ = nrrd.read(
-        segmentation_dir / '{}/Segmentation_{}_Breast.seg.nrrd'.format(
-            subject_id, subject_id)
-    )
-
-    image_array, dicom_data, first_image_position, second_image_position = _load_image_data(tcia_data_dir, fpath_mapping_df, subject_id)
     assert (image_array.shape == nrrd_breast_data.shape) and \
         (image_array.shape == nrrd_dv_data.shape), \
         """"Subject {}: Shape mismatch between arrays.
@@ -307,45 +340,6 @@ def read_precontrast_mri_and_segmentation(
         nrrd_dv_data = np.rot90(nrrd_dv_data, 2)
 
     return image_array, dicom_data, nrrd_breast_data, nrrd_dv_data
-
-
-def _load_image_data(tcia_data_dir, fpath_mapping_df, subject_id):
-    tcia_data_dir = Path(tcia_data_dir)
-
-    # Get the sequence dir from the DataFrame
-    sequence_dir = fpath_mapping_df.loc[
-        fpath_mapping_df['subject_id'] == subject_id, 'precontrast_dir'
-    ].iloc[0]
-
-    # There's also a subdir for every subject that contains the sequences
-    # There is only one of these
-    sub_dir = os.listdir(tcia_data_dir / subject_id)[0]
-
-    full_sequence_dir = tcia_data_dir / subject_id / sub_dir / sequence_dir
-
-    # Now we can iterate through the files in the sequence dir and reach each
-    # of them into a numpy array
-    dicom_file_list = sorted(os.listdir(full_sequence_dir))
-    dicom_data_list = []
-
-    # Saving the values of first two image positions
-    # This is used to orient inferior to superior
-    first_image_position = 0
-    second_image_position = 0
-
-    for i in range(len(dicom_file_list)):
-        dicom_data = pydicom.dcmread(full_sequence_dir / dicom_file_list[i])
-
-        if i == 0:
-            first_image_position = dicom_data[0x20, 0x32].value[-1]
-        elif i == 1:
-            second_image_position = dicom_data[0x20, 0x32].value[-1]
-
-        dicom_data_list.append(dicom_data.pixel_array)
-
-    # Stack in numpy array
-    image_array = np.stack(dicom_data_list, axis=-1)
-    return image_array, dicom_data, first_image_position, second_image_position
 
 
 def normalize_image(image_array, min_cutoff = 0.001, max_cutoff = 0.001):

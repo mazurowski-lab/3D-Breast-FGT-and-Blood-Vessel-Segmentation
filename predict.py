@@ -80,15 +80,6 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir):
             image_only = True
         )
 
-        pred_and_save_masks_3d_simple(
-            saved_model_path=model_save_path,
-            dataset=dataset,
-            unet=unet,
-            n_classes=n_classes,
-            n_channels=n_channels,
-            save_masks_dir=save_masks_dir,
-        )
-
     else:
 
         x_y_divisions = 8
@@ -99,23 +90,26 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir):
 
         dataset = Dataset3DDivided(
             image_dir = image_dir,
-            mask_dir = None,
+            mask_dir = input_mask_dir,
             additional_input_dir = input_mask_dir,
             input_dim = 96,
             x_y_divisions = x_y_divisions,
             z_division = z_division,
             transforms = transforms,
             one_hot_mask = True,
-            image_only = True
+            image_only = False
         )
 
-        pred_and_save_masks_3d_simple(
-            unet,
-            model_save_path,
-            dataset,
-            n_classes,
-            save_masks_dir
-        )
+    pred_and_save_masks_3d_simple(
+        saved_model_path=model_save_path,
+        dataset=dataset,
+        unet=unet,
+        n_classes=n_classes,
+        n_channels=n_channels,
+        save_masks_dir=save_masks_dir,
+    )
+
+    return save_masks_dir
 
 
 if __name__ == '__main__':
