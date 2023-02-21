@@ -79,8 +79,7 @@ if __name__ == '__main__':
         n_channels = 2
         n_classes = 3
     else:
-        print('Target tissue must either be breast or dv')
-        raise
+        raise ValueError('Target tissue must either be breast or dv')
 
     unet = UNet3D(
         in_channels = n_channels, 

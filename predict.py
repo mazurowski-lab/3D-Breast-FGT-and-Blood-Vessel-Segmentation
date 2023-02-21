@@ -1,4 +1,12 @@
 import argparse
+from pathlib import Path
+
+import torchio as tio
+from unet import UNet3D
+
+from dataset_3d import Dataset3DSimple, Dataset3DDivided
+from model_utils import pred_and_save_masks_3d_simple, pred_and_save_masks_3d_divided
+
 
 # Performs predictions using a trained model.
 # Predictions are performed the same method we used and are saved to a
@@ -35,32 +43,29 @@ def get_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    from dataset_3d import *
-    from model_utils import pred_and_save_masks_3d_simple, pred_and_save_masks_3d_divided
-    from unet import UNet3D
+def run(target_tissue, image_dir, input_mask_dir, save_masks_dir):
+    model_dirpath = Path(__file__).parent / "trained_models"
 
-    args = get_args()
-
-    if args.target_tissue == 'breast':
+    if target_tissue == 'breast':
+        model_save_path = model_dirpath / "breast_model.pth"
         n_channels = 1
         n_classes = 1
-    elif args.target_tissue == 'dv':
+    elif target_tissue == 'dv':
+        model_save_path = model_dirpath / "dv_model.pth"
         n_channels = 2
         n_classes = 3
     else:
-        print('Target tissue must either be breast or dv')
-        raise
+        raise ValueError('Target tissue must either be breast or dv')
 
     unet = UNet3D(
-        in_channels = n_channels, 
+        in_channels = n_channels,
         out_classes = n_classes,
         num_encoding_blocks = 3,
         padding = True,
         normalization = 'batch'
     )
 
-    if args.target_tissue == 'breast':
+    if target_tissue == 'breast':
 
         input_dim = (144, 144, 96)
 
@@ -69,18 +74,19 @@ if __name__ == '__main__':
         ])
 
         dataset = Dataset3DSimple(
-            image_dir = args.image_dir,
+            image_dir = image_dir,
             mask_dir = None,
             transforms = transforms,
             image_only = True
         )
 
         pred_and_save_masks_3d_simple(
-            unet,
-            args.model_save_path,
-            dataset,
-            n_classes,
-            args.save_masks_dir
+            saved_model_path=model_save_path,
+            dataset=dataset,
+            unet=unet,
+            n_classes=n_classes,
+            n_channels=n_channels,
+            save_masks_dir=save_masks_dir,
         )
 
     else:
@@ -92,9 +98,9 @@ if __name__ == '__main__':
         ])
 
         dataset = Dataset3DDivided(
-            image_dir = args.image_dir,
+            image_dir = image_dir,
             mask_dir = None,
-            additional_input_dir = args.input_mask_dir,
+            additional_input_dir = input_mask_dir,
             input_dim = 96,
             x_y_divisions = x_y_divisions,
             z_division = z_division,
@@ -105,8 +111,20 @@ if __name__ == '__main__':
 
         pred_and_save_masks_3d_simple(
             unet,
-            args.model_save_path,
+            model_save_path,
             dataset,
             n_classes,
-            args.save_masks_dir
+            save_masks_dir
         )
+
+
+if __name__ == '__main__':
+    args = get_args()
+
+    run(
+        target_tissue=args.target_tissue,
+        image_dir=args.image_dir,
+        input_mask_dir=args.input_mask_dir,
+        model_save_path=args.model_save_path,
+        save_masks_dir=args.save_masks_dir,
+    )
