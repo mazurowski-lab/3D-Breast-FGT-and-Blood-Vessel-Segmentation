@@ -87,7 +87,7 @@ def preprocess_image_segmentations(subject_id, tcia_data_dir, fpath_mapping_df, 
     )
     return image_array, dicom_data, nrrd_breast_data, nrrd_dv_data
 
-def visualize(image_array, nrrd_breast_data, nrrd_dv_data):
+def visualize(image_array, nrrd_breast_data, nrrd_dv_data=None):
     plt.subplot(2, 3, 1)
     plt.title('MRI Volume')
     plt.imshow(image_array[:, :, 50], cmap='gray')
@@ -99,20 +99,21 @@ def visualize(image_array, nrrd_breast_data, nrrd_dv_data):
     plt.axis('off')
     # plt.show()
     # return
-    plt.subplot(2, 3, 4)
-    plt.title('FGT + Blood Vessel Mask')
-    plt.imshow(nrrd_dv_data[0, :, :, 50], cmap='gray')
-    plt.axis('off')
+    if nrrd_dv_data is not None:
+        plt.subplot(2, 3, 4)
+        plt.title('FGT + Blood Vessel Mask')
+        plt.imshow(nrrd_dv_data[0, :, :, 50], cmap='gray')
+        plt.axis('off')
 
-    plt.subplot(2, 3, 5)
-    plt.title('FGT + Blood Vessel Mask')
-    plt.imshow(nrrd_dv_data[1, :, :, 50], cmap='gray')
-    plt.axis('off')
+        plt.subplot(2, 3, 5)
+        plt.title('FGT + Blood Vessel Mask')
+        plt.imshow(nrrd_dv_data[1, :, :, 50], cmap='gray')
+        plt.axis('off')
 
-    plt.subplot(2, 3, 6)
-    plt.title('FGT + Blood Vessel Mask')
-    plt.imshow(nrrd_dv_data[2, :, :, 50], cmap='gray')
-    plt.axis('off')
+        plt.subplot(2, 3, 6)
+        plt.title('FGT + Blood Vessel Mask')
+        plt.imshow(nrrd_dv_data[2, :, :, 50], cmap='gray')
+        plt.axis('off')
 
     plt.show()
 
@@ -120,7 +121,7 @@ def visualize(image_array, nrrd_breast_data, nrrd_dv_data):
 def display(subject_id, base_path):
     image_array = np.load(Path(base_path / "preprocessed" / f"{subject_id}.npy"))
     nrrd_breast_data = np.load(Path(base_path / "breast_masks" / f"{subject_id}.npy"))
-    nrrd_dv_data = np.load(Path(base_path / "fgt_bv_masks" / f"{subject_id}.npy"))
+    nrrd_dv_data = None # np.load(Path(base_path / "fgt_bv_masks" / f"{subject_id}.npy"))
     visualize(image_array, nrrd_breast_data, nrrd_dv_data)
 
 
@@ -145,6 +146,7 @@ def preprocess(tcia_data_dir, preprocessed_array_base_save_path, csv_mappings_fi
             logger.exception("Error Trace:\n%s", "-" * 30)
     return volumes_npy_paths
 
+
 if __name__ == '__main__':
     # client = Client(threads_per_worker=4, n_workers=1)
 
@@ -164,27 +166,31 @@ if __name__ == '__main__':
     dv_masks_save_path.mkdir(exist_ok=True, parents=True)
     preprocessed_array_base_save_path = tcia_data_dir.parent / "preprocessed"
 
+    run_preprocessing = False
+    run_breast_mask_inference = False
+    run_fgt_dv_mask_inference = True
+
     max_count = None
-    preprocessed_smri_paths = preprocess(tcia_data_dir, preprocessed_array_base_save_path, csv_mappings_filepath, breast_mask_save_path, max_count=8)
+    if run_preprocessing:
+        preprocessed_smri_paths = preprocess(tcia_data_dir, preprocessed_array_base_save_path, csv_mappings_filepath, breast_mask_save_path, max_count=8)
 
-    logger.info("Running Breast mask inference on all preprocessed subjects")
+    if run_breast_mask_inference:
+        logger.info("Running Breast mask inference on all preprocessed subjects")
+        run(
+            target_tissue="breast",
+            image_dir=str(preprocessed_array_base_save_path),
+            input_mask_dir=str(breast_mask_save_path),
+            save_masks_dir=str(breast_mask_save_path),
+            max_count=max_count,
+        )
 
-    run(
-        target_tissue="breast",
-        image_dir=str(preprocessed_array_base_save_path),
-        input_mask_dir=str(breast_mask_save_path),
-        save_masks_dir=str(breast_mask_save_path),
-        max_count=max_count,
-
-    )
-
-    quit()
-    logger.info("Running FGT & DV mask inference on all preprocessed subjects & corresponding inferred breast masks")
-    run(
-        target_tissue="dv",
-        image_dir=str(preprocessed_array_base_save_path),
-        input_mask_dir=str(breast_mask_save_path),
-        save_masks_dir=str(dv_masks_save_path),
-    )
+    if run_fgt_dv_mask_inference:
+        logger.info("Running FGT & DV mask inference on all preprocessed subjects & corresponding inferred breast masks")
+        run(
+            target_tissue="dv",
+            image_dir=str(preprocessed_array_base_save_path),
+            input_mask_dir=str(breast_mask_save_path),
+            save_masks_dir=str(dv_masks_save_path),
+        )
     display(subject_id, base_path=base_path)
 
