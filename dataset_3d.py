@@ -112,7 +112,7 @@ class _Dataset3DBase(Dataset):
                 continue
             smri_filepath = image_dir / '{}.npy'.format(subject_id)
             image_array = np.load(smri_filepath)
-            self.image_array_list.update({subject_id: image_array})
+            self.image_array_list.append(image_array)
 
             if not self.image_only:
                 mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))

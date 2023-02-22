@@ -737,13 +737,13 @@ def pred_and_save_masks_3d_simple(
         dataset,
         batch_size = 1, 
         shuffle = False,
-        num_workers = num_workers
+        num_workers = num_workers,
     )
 
     print('Predicting Masks...')
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
 
-        current_subject = dataset.subject_id_list[0]
+        current_subject = dataset.subject_id_list[i]
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_shape_list[0]
 

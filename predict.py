@@ -93,6 +93,7 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None
             n_classes=n_classes,
             n_channels=n_channels,
             save_masks_dir=save_masks_dir,
+            num_workers=0,  # Multiprocessing sometimes reveals unpickling error.
         )
     else:
 

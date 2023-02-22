@@ -124,6 +124,27 @@ def display(subject_id, base_path):
     visualize(image_array, nrrd_breast_data, nrrd_dv_data)
 
 
+def preprocess(tcia_data_dir, preprocessed_array_base_save_path, csv_mappings_filepath, breast_mask_save_path, max_count=None):
+    if max_count:
+        subjects_dirs = tuple(tcia_data_dir.iterdir())[:max_count]
+    else:
+        subjects_dirs = tcia_data_dir.iterdir()
+
+    for subject_id in subjects_dirs:
+        logger.info("Preprocessing sMRI for %s", subject_id.name)
+        try:
+            volumes_npy_paths = preprocess_and_save_image_volume(
+                subject_id.name,
+                tcia_data_dir,
+                preprocessed_array_base_save_path=preprocessed_array_base_save_path,
+                mappings_filepath=csv_mappings_filepath,
+                segmentation_dir=breast_mask_save_path,
+            )
+        except Exception as e:
+            logger.error("Preprocessing subject %s: %s", subject_id.name, e)
+            logger.exception("Error Trace:\n%s", "-" * 30)
+    return volumes_npy_paths
+
 if __name__ == '__main__':
     # client = Client(threads_per_worker=4, n_workers=1)
 
@@ -143,46 +164,27 @@ if __name__ == '__main__':
     dv_masks_save_path.mkdir(exist_ok=True, parents=True)
     preprocessed_array_base_save_path = tcia_data_dir.parent / "preprocessed"
 
-    max_count = 2
-    if max_count:
-        subjects_dirs = tuple(tcia_data_dir.iterdir())[:max_count]
-    else:
-        subjects_dirs = tcia_data_dir.iterdir()
+    max_count = None
+    preprocessed_smri_paths = preprocess(tcia_data_dir, preprocessed_array_base_save_path, csv_mappings_filepath, breast_mask_save_path, max_count=8)
 
-    for subject_id in subjects_dirs:
-        logger.info("Preprocessing sMRI for %s", subject_id.name)
-        try:
-            volumes_npy_paths = preprocess_and_save_image_volume(
-                subject_id.name,
-                tcia_data_dir,
-                preprocessed_array_base_save_path=preprocessed_array_base_save_path,
-                mappings_filepath=csv_mappings_filepath,
-                segmentation_dir=breast_mask_save_path,
-            )
-        except Exception as e:
-            logger.error("Preprocessing subject %s: %s", subject_id.name, e)
-            logger.exception("Error Trace:\n%s", "-" * 30)
+    logger.info("Running Breast mask inference on all preprocessed subjects")
 
-    if not (breast_mask_save_path / f"{subject_id}.npy").exists():
-        logger.info("Running Breast mask inference on all preprocessed subjects")
+    run(
+        target_tissue="breast",
+        image_dir=str(preprocessed_array_base_save_path),
+        input_mask_dir=str(breast_mask_save_path),
+        save_masks_dir=str(breast_mask_save_path),
+        max_count=max_count,
 
-        run(
-            target_tissue="breast",
-            image_dir=str(preprocessed_array_base_save_path),
-            input_mask_dir=str(breast_mask_save_path),
-            save_masks_dir=str(breast_mask_save_path),
-            max_count=2,
-
-        )
+    )
 
     quit()
-    if not (dv_masks_save_path / f"{subject_id}.npy").exists():
-        logger.info("Running FGT & DV mask inference on all preprocessed subjects & corresponding inferred breast masks")
-        run(
-            target_tissue="dv",
-            image_dir=str(preprocessed_array_base_save_path),
-            input_mask_dir=str(breast_mask_save_path),
-            save_masks_dir=str(dv_masks_save_path),
-        )
+    logger.info("Running FGT & DV mask inference on all preprocessed subjects & corresponding inferred breast masks")
+    run(
+        target_tissue="dv",
+        image_dir=str(preprocessed_array_base_save_path),
+        input_mask_dir=str(breast_mask_save_path),
+        save_masks_dir=str(dv_masks_save_path),
+    )
     display(subject_id, base_path=base_path)
 
