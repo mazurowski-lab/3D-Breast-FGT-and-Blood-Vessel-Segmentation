@@ -1,9 +1,11 @@
+import logging
 import os
 from pathlib import Path
 
+import daiquiri
+from dask.distributed import Client, progress
 from matplotlib import pyplot as plt
 import numpy as np
-import pydicom
 
 from predict import run
 from preprocessing import (
@@ -12,9 +14,12 @@ from preprocessing import (
     read_precontrast_mri,
     zscore_image, read_precontrast_mri_and_segmentation,
 )
+from setup_logging import setup_logging
+
+logger = daiquiri.getLogger(__name__)
 
 
-def preprocess_and_save_image_volume(subject_id, tcia_data_dir, mappings_filepath=None, segmentation_dir=None):
+def preprocess_and_save_image_volume(subject_id, tcia_data_dir, preprocessed_array_base_save_path, mappings_filepath=None, segmentation_dir=None):
     if mappings_filepath:
         fpath_mapping_df = clean_filepath_filename_mapping_csv(str(mappings_filepath))
     else:
@@ -27,7 +32,7 @@ def preprocess_and_save_image_volume(subject_id, tcia_data_dir, mappings_filepat
     # There's also a subdir for every subject that contains the sequences
     # There is only one of these
     sub_dir = os.listdir(tcia_data_dir / subject_id)[0]
-    preprocessed_array_base_save_path = Path(f'{tcia_data_dir.parent / "preprocessed" / subject_id}')
+    preprocessed_save_path = Path(f'{preprocessed_array_base_save_path / subject_id}')
 
     if fpath_mapping_df is not None:
         sequence_dir = fpath_mapping_df.loc[
@@ -46,14 +51,15 @@ def preprocess_and_save_image_volume(subject_id, tcia_data_dir, mappings_filepat
     volumes_npy_paths = []
     for full_sequence_dir_ in full_sequence_dirs:
         if mappings_filepath:
-            npy_save_path = Path(f'{preprocessed_array_base_save_path}.npy')
+            npy_save_path = Path(f'{preprocessed_save_path}.npy')
         else:
-            npy_save_path = Path(f'{preprocessed_array_base_save_path / full_sequence_dir_.name}.npy')
+            npy_save_path = Path(f'{preprocessed_save_path / full_sequence_dir_.name}.npy')
         npy_save_path.parent.mkdir(exist_ok=True, parents=True)
         if npy_save_path.exists():
+            logger.debug("%s exists. Skipping preprocessing.", npy_save_path)
             volumes_npy_paths.append(npy_save_path)
             continue
-        image_array, dcm_data, volume_path = preprocess_image_dicoms(full_sequence_dir_)
+        image_array, dcm_data = preprocess_image_dicoms(full_sequence_dir_)
         # image_array, dicom_data, nrrd_breast_data, nrrd_dv_data = preprocess_image_segmentations(
         #     subject_id=subject_id,
         #     tcia_data_dir=tcia_data_dir,
@@ -62,13 +68,14 @@ def preprocess_and_save_image_volume(subject_id, tcia_data_dir, mappings_filepat
         # )
         np.save(npy_save_path, image_array)
         volumes_npy_paths.append(npy_save_path)
-    return preprocessed_array_base_save_path.parent, volumes_npy_paths
+    return volumes_npy_paths
 
 
 def preprocess_image_dicoms(full_sequence_dir):
-    image_array, dcm_data, volume_path = read_precontrast_mri(full_sequence_dir)
+    logger.debug("PreprocessingDICOMs in %s",full_sequence_dir)
+    image_array, dcm_data = read_precontrast_mri(full_sequence_dir)
     image_array = zscore_image(normalize_image(image_array))
-    return image_array, dcm_data, volume_path
+    return image_array, dcm_data
 
 
 def preprocess_image_segmentations(subject_id, tcia_data_dir, fpath_mapping_df, segmentation_dir):
@@ -118,6 +125,9 @@ def display(subject_id, base_path):
 
 
 if __name__ == '__main__':
+    # client = Client(threads_per_worker=4, n_workers=1)
+
+    setup_logging(level=logging.DEBUG, log_dirpath=Path(__file__).parent)
     base_path = Path(r"D:\projects-data\mazurowski\manifest-1654812109500")
     xlsx_mappings_filepath = base_path / "Breast-Cancer-MRI-filepath_filename-mapping.xlsx"
     csv_mappings_filepath = base_path / "Breast-Cancer-MRI-filepath_filename-mapping.csv"
@@ -131,26 +141,48 @@ if __name__ == '__main__':
     breast_mask_save_path.mkdir(exist_ok=True, parents=True)
     dv_masks_save_path = base_path / "fgt_bv_masks"
     dv_masks_save_path.mkdir(exist_ok=True, parents=True)
+    preprocessed_array_base_save_path = tcia_data_dir.parent / "preprocessed"
 
-    preprocessed_images_dirpath, volumes_npy_paths = preprocess_and_save_image_volume(
-        subject_id,
-        tcia_data_dir,
-        mappings_filepath=csv_mappings_filepath,
-        segmentation_dir=breast_mask_save_path,
-    )
-    # if not (breast_mask_save_path / f"{subject_id}.npy").exists():
-    run(
-        target_tissue="breast",
-        image_dir=str(preprocessed_images_dirpath),
-        input_mask_dir=str(breast_mask_save_path),
-        save_masks_dir=str(breast_mask_save_path),
-    )
-# if not (dv_masks_save_path / f"{subject_id}.npy").exists():
-    run(
-        target_tissue="dv",
-        image_dir=str(preprocessed_images_dirpath),
-        input_mask_dir=str(breast_mask_save_path),
-        save_masks_dir=str(dv_masks_save_path),
-    )
-    display(subject_id)
+    max_count = 2
+    if max_count:
+        subjects_dirs = tuple(tcia_data_dir.iterdir())[:max_count]
+    else:
+        subjects_dirs = tcia_data_dir.iterdir()
+
+    for subject_id in subjects_dirs:
+        logger.info("Preprocessing sMRI for %s", subject_id.name)
+        try:
+            volumes_npy_paths = preprocess_and_save_image_volume(
+                subject_id.name,
+                tcia_data_dir,
+                preprocessed_array_base_save_path=preprocessed_array_base_save_path,
+                mappings_filepath=csv_mappings_filepath,
+                segmentation_dir=breast_mask_save_path,
+            )
+        except Exception as e:
+            logger.error("Preprocessing subject %s: %s", subject_id.name, e)
+            logger.exception("Error Trace:\n%s", "-" * 30)
+
+    if not (breast_mask_save_path / f"{subject_id}.npy").exists():
+        logger.info("Running Breast mask inference on all preprocessed subjects")
+
+        run(
+            target_tissue="breast",
+            image_dir=str(preprocessed_array_base_save_path),
+            input_mask_dir=str(breast_mask_save_path),
+            save_masks_dir=str(breast_mask_save_path),
+            max_count=2,
+
+        )
+
+    quit()
+    if not (dv_masks_save_path / f"{subject_id}.npy").exists():
+        logger.info("Running FGT & DV mask inference on all preprocessed subjects & corresponding inferred breast masks")
+        run(
+            target_tissue="dv",
+            image_dir=str(preprocessed_array_base_save_path),
+            input_mask_dir=str(breast_mask_save_path),
+            save_masks_dir=str(dv_masks_save_path),
+        )
+    display(subject_id, base_path=base_path)
 

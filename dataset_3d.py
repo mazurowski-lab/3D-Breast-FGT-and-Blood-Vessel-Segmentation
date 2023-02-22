@@ -1,4 +1,7 @@
 import os
+from typing import Optional, Union
+
+import daiquiri
 import numpy as np
 import nrrd
 from torch.utils.data import Dataset
@@ -22,6 +25,8 @@ import torchio as tio
 # Masks should be stored with the same file structure. There should be separate
 # upper level directories for breast and dense/vessels. 
 
+logger = daiquiri.getLogger(__name__)
+
 class _Dataset3DBase(Dataset):
     def __init__(
         self, 
@@ -30,7 +35,10 @@ class _Dataset3DBase(Dataset):
         additional_input_dir = None,
         transforms = None,
         one_hot_mask = False,
-        image_only = False
+        image_only = False,
+        overwrite=True,
+        save_masks_dir: Optional[Union[Path, str]] = None,
+        max_count: Optional[int] = None,
     ):
         """
         This class converts 3D MRI volumes and segmentations into a 3D dataset.
@@ -63,7 +71,9 @@ class _Dataset3DBase(Dataset):
         self.transforms = transforms
         self.one_hot_mask = one_hot_mask
         self.image_only = image_only
-
+        self.overwrite = overwrite
+        self.save_masks_dir = save_masks_dir
+        self.max_count = max_count
         # To improve efficiency of dataset, all of the data will be loaded
         # into RAM. Otherwise it would be more complicated to load each
         # slice and provide them in batches to the model without having to
@@ -90,10 +100,19 @@ class _Dataset3DBase(Dataset):
         self.subject_id_list = [
             x.rstrip('.npy') for x in sorted(os.listdir(image_dir))
         ]
+        if self.max_count:
+            subject_id_list = self.subject_id_list[: self.max_count]
+        else:
+            subject_id_list = self.subject_id_list
 
-        for subject_id in self.subject_id_list:
-            image_array = np.load(image_dir / '{}.npy'.format(subject_id))
-            self.image_array_list.append(image_array)
+        for subject_id in subject_id_list:
+            logger.info("Subject: %s", subject_id)
+            if self.save_masks_dir and (Path(self.save_masks_dir, f'{subject_id}.npy')).exists() and self.overwrite is False:
+                logger.debug("%s exists. Not including in prediction dataset for loading", self.save_masks_dir / f'{subject_id}.npy')
+                continue
+            smri_filepath = image_dir / '{}.npy'.format(subject_id)
+            image_array = np.load(smri_filepath)
+            self.image_array_list.update({subject_id: image_array})
 
             if not self.image_only:
                 mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))
@@ -117,7 +136,7 @@ class _Dataset3DBase(Dataset):
                             image_array.shape, 
                             additional_input_array.shape
                         )
-
+            logger.debug("%s array loaded in prediction dataset for loading", image_dir / '{}.npy'.format(subject_id))
             self.image_shape_list.append(image_array.shape)
 
         print('Loaded in {} MRI volumes and mask volumes'.format(
@@ -489,7 +508,9 @@ class Dataset3DDivided(_Dataset3DBase):
         additional_input_dir = None,
         transforms = None,
         one_hot_mask = False,
-        image_only = False
+        image_only = False,
+        max_count = None,
+
     ):
         """
         This class samples the full volume by sample an equal number of times
@@ -512,7 +533,8 @@ class Dataset3DDivided(_Dataset3DBase):
             additional_input_dir = additional_input_dir,
             transforms = transforms,
             one_hot_mask = one_hot_mask,
-            image_only = image_only
+            image_only = image_only,
+            max_count=max_count,
         )
 
         self.input_dim = input_dim

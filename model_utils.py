@@ -1,4 +1,6 @@
 import os
+
+import daiquiri
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
@@ -13,6 +15,9 @@ from losses import dice_coeff
 import torchio as tio
 
 import gc
+
+logger = daiquiri.getLogger(__name__)
+
 
 def pred_and_save_masks_2d(
     model,

@@ -7,3 +7,5 @@ tqdm
 pynrrd
 torchio
 unet
+daiquiri
+dask

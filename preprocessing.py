@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -32,9 +34,11 @@ def clean_filepath_filename_mapping_csv(filepath_filename_csv_path):
     """
 
     # Read in csv as DataFrame
-    fpath_mapping_df = pd.read_csv(
-        filepath_filename_csv_path
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter(action="ignore", category=pd.errors.DtypeWarning)
+        fpath_mapping_df = pd.read_csv(
+            filepath_filename_csv_path
+        )
     # We only need the filename and the descriptive path
     fpath_mapping_df = fpath_mapping_df.loc[
         :, ['original_path_and_filename', 'descriptive_path']
@@ -133,7 +137,7 @@ def read_precontrast_mri(full_sequence_dir):
     if round(dicom_data[0x20, 0x37].value[0], 0) == -1:
         image_array = np.rot90(image_array, 2)
 
-    return image_array, dicom_data, full_sequence_dir
+    return image_array, dicom_data
 
 def read_precontrast_mri_and_segmentation(
     subject_id, 
