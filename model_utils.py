@@ -1,6 +1,7 @@
 import os
 
 import daiquiri
+import torchvision.transforms
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
@@ -424,10 +425,10 @@ def pred_and_save_masks_3d_divided(
 
         # Get preds
         image = batch['image']
-        mask = batch['mask']
-
         image = image.to(device, dtype=torch.float32)
-        mask = mask.to(device, dtype=torch.float32)
+        mask = batch.get('mask')
+        if mask:
+            mask = mask.to(device, dtype=torch.float32)
 
         with torch.no_grad():
             pred = unet(image)
@@ -462,12 +463,24 @@ def pred_and_save_masks_3d_divided(
                 (n_classes, x_length, y_length, z_length, 1), dtype=np.half
             )
             current_pred_array[:] = np.nan
+            upsizer = torchvision.transforms.Resize(size=(x_length, y_length))
+            pred_tensor = torch.as_tensor(pred).squeeze()
+            for channel_dim in range(3):
+                tensor_same_channel = []
+                for slice_num in range(pred.shape[-1]):
+                    tensor_2d = pred_tensor[channel_dim, :, :, slice_num]
+                    tensor_same_channel.append(upsizer(tensor_2d))
+                torch.stack(
+                    tensors=tensor_same_channel,
+                    # dim=3,
+                )
 
             current_pred_array[
                 :, 
                 x_index:x_index + dataset.input_dim,
                 y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                z_index:z_index + dataset.input_dim,
+                :,
             ] = pred
 
         # print(pred.dtype)

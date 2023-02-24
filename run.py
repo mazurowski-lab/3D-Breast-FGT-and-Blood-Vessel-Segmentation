@@ -19,6 +19,15 @@ from setup_logging import setup_logging
 logger = daiquiri.getLogger(__name__)
 
 
+def find_precontrast_volume(subject_id, tcia_data_dir, mappings_filepath):
+    fpath_mapping_df = clean_filepath_filename_mapping_csv(str(mappings_filepath))
+    sequence_dir = fpath_mapping_df.loc[
+        fpath_mapping_df['subject_id'] == subject_id, 'precontrast_dir'
+    ].iloc[0]
+    sub_dir = os.listdir(tcia_data_dir / subject_id)[0]
+    return tcia_data_dir / subject_id / sub_dir / sequence_dir
+
+
 def preprocess_and_save_image_volume(subject_id, tcia_data_dir, preprocessed_array_base_save_path, mappings_filepath=None, segmentation_dir=None):
     if mappings_filepath:
         fpath_mapping_df = clean_filepath_filename_mapping_csv(str(mappings_filepath))
@@ -156,7 +165,7 @@ if __name__ == '__main__':
     csv_mappings_filepath = base_path / "Breast-Cancer-MRI-filepath_filename-mapping.csv"
     tcia_data_dir = base_path / "Duke-Breast-Cancer-MRI"
 
-    subject_id = 'Breast_MRI_025'
+    subject_id = 'Breast_MRI_002'
 
     subject_dirpath = tcia_data_dir / subject_id
     volumes_dirpath = [item for item in subject_dirpath.iterdir() if item.is_dir()][0]

@@ -4,6 +4,7 @@ from typing import Optional, Union
 import daiquiri
 import numpy as np
 import nrrd
+import torchio
 from torch.utils.data import Dataset
 from pathlib import Path
 import torch
@@ -116,11 +117,15 @@ class _Dataset3DBase(Dataset):
 
             if not self.image_only:
                 mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))
+                # is image_array.shape != mask_array.shape:
+                #     torchio.Resize
                 self.mask_array_list.append(mask_array)
 
-                assert image_array.shape == mask_array.shape, \
-                    'Image array and mask array shape do not match: {}, {}'\
-                        .format(image_array.shape, mask_array.shape)
+                if image_array.shape != mask_array.shape:
+                    logger.error(
+                        'Skipping Image array and mask array shape do not match: {}, {}'.format(image_array.shape, mask_array.shape)
+                    )
+                    continue
 
             if additional_input_dir:
                 additional_input_array = np.load(
@@ -128,14 +133,16 @@ class _Dataset3DBase(Dataset):
                 )
                 self.additional_input_list.append(additional_input_array)
 
-                assert image_array.shape == additional_input_array.shape, \
-                    """Subject: {}
-                    Image array and addutional input array shape do not match: {}, {}"""\
+                if image_array.shape != additional_input_array.shape:
+                    logger.error(
+                        "Skipping Subject: {} Image array and addutional input array shape do not match: {}, {}"
                         .format(
                             subject_id,
                             image_array.shape, 
                             additional_input_array.shape
                         )
+                    )
+                    continue
             logger.debug("%s array loaded in prediction dataset for loading", image_dir / '{}.npy'.format(subject_id))
             self.image_shape_list.append(image_array.shape)
 
