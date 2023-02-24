@@ -176,8 +176,8 @@ if __name__ == '__main__':
     preprocessed_array_base_save_path = tcia_data_dir.parent / "preprocessed"
 
     run_preprocessing = False
-    run_breast_mask_inference = False
-    run_fgt_dv_mask_inference = True
+    run_breast_mask_inference = True
+    run_fgt_dv_mask_inference = False
 
     max_count = None
     if run_preprocessing:
@@ -201,5 +201,11 @@ if __name__ == '__main__':
             input_mask_dir=str(breast_mask_save_path),
             save_masks_dir=str(dv_masks_save_path),
         )
-    display(subject_id, base_path=base_path)
 
+    all_image_and_breast_masks = [
+        {"preprocessed_image": np.load(image_path), "breast_mask": np.load(mask_path)}
+        for image_path, mask_path in zip(preprocessed_array_base_save_path.iterdir(), breast_mask_save_path.iterdir())
+    ]
+    for subject_id in preprocessed_array_base_save_path.iterdir():
+        display(subject_id.stem, base_path=base_path)
+    ...

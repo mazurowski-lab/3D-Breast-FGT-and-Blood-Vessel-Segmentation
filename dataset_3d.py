@@ -319,6 +319,10 @@ class Dataset3DSimple(_Dataset3DBase):
 
         # Get image and mask array based on indicies 
         image_array = np.expand_dims(self.image_array_list[i], axis=0)
+        # logger.warning("Overriding passed in transforms.")
+        # transforms = tio.Compose([
+        #     tio.Resize((144, 144, image_array.shape[-1]))
+        # ])
 
         if self.image_only:
             return transform_using_torchio_image_only(image_array, self.transforms)
