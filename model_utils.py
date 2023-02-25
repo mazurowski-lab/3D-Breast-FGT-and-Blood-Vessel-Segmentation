@@ -459,29 +459,30 @@ def pred_and_save_masks_3d_divided(
                 z_index:z_index + dataset.input_dim
             ] = pred
         else:
-            current_pred_array = np.empty(
-                (n_classes, x_length, y_length, z_length, 1), dtype=np.half
-            )
-            current_pred_array[:] = np.nan
+            # current_pred_array = np.empty(
+            #     (n_classes, x_length, y_length, z_length, 1), dtype=np.half
+            # )
+            # current_pred_array[:] = np.nan
             upsizer = torchvision.transforms.Resize(size=(x_length, y_length))
             pred_tensor = torch.as_tensor(pred).squeeze()
-            for channel_dim in range(3):
-                tensor_same_channel = []
-                for slice_num in range(pred.shape[-1]):
-                    tensor_2d = pred_tensor[channel_dim, :, :, slice_num]
-                    tensor_same_channel.append(upsizer(tensor_2d))
-                torch.stack(
-                    tensors=tensor_same_channel,
-                    # dim=3,
-                )
+            current_pred_array = torch.stack([upsizer(pred_tensor[0, ...]) for channel_dim in range(3)], dim=0)
+            # for channel_dim in range(3):
+            #     tensor_same_channel = []
+            #     for slice_num in range(pred.shape[-1]):
+            #         tensor_2d = pred_tensor[channel_dim, :, :, slice_num]
+            #         tensor_same_channel.append(upsizer(tensor_2d))
+            #     torch.stack(
+            #         tensors=tensor_same_channel,
+            #         # dim=3,
+            #     )
 
-            current_pred_array[
-                :, 
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim,
-                :,
-            ] = pred
+            # current_pred_array[
+            #     :,
+            #     x_index:x_index + dataset.input_dim,
+            #     y_index:y_index + dataset.input_dim,
+            #     z_index:z_index + dataset.input_dim,
+            #     :,
+            # ] = pred
 
         # print(pred.dtype)
 

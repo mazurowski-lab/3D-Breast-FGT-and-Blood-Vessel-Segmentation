@@ -46,7 +46,7 @@ def get_args():
     return parser.parse_args()
 
 
-def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None):
+def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None, subject_id_allow_list=None):
     model_dirpath = Path(__file__).parent / "trained_models"
 
     if target_tissue == 'breast':
@@ -83,6 +83,7 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None
             image_only = True,
             save_masks_dir=save_masks_dir,
             max_count=max_count,
+            subject_id_allow_list=subject_id_allow_list,
         )
         logger.info("Inferring Breast mask.")
 
@@ -116,6 +117,7 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None
             one_hot_mask = True,
             image_only = True,
             max_count = max_count,
+            subject_id_allow_list=subject_id_allow_list,
 
         )
         logger.info("Inferring FGT & DV mask.")

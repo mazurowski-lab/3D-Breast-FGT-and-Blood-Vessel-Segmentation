@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Union
+from typing import Optional, Union, Iterable
 
 import daiquiri
 import numpy as np
@@ -40,6 +40,7 @@ class _Dataset3DBase(Dataset):
         overwrite=True,
         save_masks_dir: Optional[Union[Path, str]] = None,
         max_count: Optional[int] = None,
+        subject_id_allow_list: Optional[Iterable[str]] = None
     ):
         """
         This class converts 3D MRI volumes and segmentations into a 3D dataset.
@@ -75,6 +76,7 @@ class _Dataset3DBase(Dataset):
         self.overwrite = overwrite
         self.save_masks_dir = save_masks_dir
         self.max_count = max_count
+        self.subject_id_allow_list = subject_id_allow_list
         # To improve efficiency of dataset, all of the data will be loaded
         # into RAM. Otherwise it would be more complicated to load each
         # slice and provide them in batches to the model without having to
@@ -105,7 +107,8 @@ class _Dataset3DBase(Dataset):
             subject_id_list = self.subject_id_list[: self.max_count]
         else:
             subject_id_list = self.subject_id_list
-
+        if self.subject_id_allow_list:
+            self.subject_id_list = sorted(set(self.subject_id_list).intersection(self.subject_id_allow_list))
         for subject_id in subject_id_list:
             logger.info("Subject: %s", subject_id)
             if self.save_masks_dir and (Path(self.save_masks_dir, f'{subject_id}.npy')).exists() and self.overwrite is False:
@@ -521,6 +524,7 @@ class Dataset3DDivided(_Dataset3DBase):
         one_hot_mask = False,
         image_only = False,
         max_count = None,
+        subject_id_allow_list=None,
 
     ):
         """
@@ -546,6 +550,7 @@ class Dataset3DDivided(_Dataset3DBase):
             one_hot_mask = one_hot_mask,
             image_only = image_only,
             max_count=max_count,
+            subject_id_allow_list=subject_id_allow_list,
         )
 
         self.input_dim = input_dim
