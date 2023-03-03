@@ -1,4 +1,6 @@
 import os
+
+import nibabel
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
@@ -392,11 +394,7 @@ def pred_and_save_masks_3d_divided(
                 )
 
             # Save the array; we'll keep the raw values
-            np.save(
-                save_masks_dir / '{}.npy'.format(current_subject), 
-                volume_pred_array
-            )
-
+            save_image(volume_pred_array, current_subject, save_masks_dir)
             del pred_volume_list
             del volume_pred_array
             gc.collect()
@@ -480,11 +478,18 @@ def pred_and_save_masks_3d_divided(
         )
 
     # Save the array; we'll keep the raw values
-    np.save(
-        save_masks_dir / '{}.npy'.format(current_subject), 
-        volume_pred_array
-    )
-    
+    save_image(volume_pred_array, current_subject, save_masks_dir)
+
+
+def save_image(volume_pred_array, current_subject, save_masks_dir):
+    count = 0
+    while (npy_path := save_masks_dir / f'{current_subject}{count or ""}.npy').exists():
+        count += 1
+    np.save(npy_path, volume_pred_array)
+    nibabel.save(nibabel.Nifti1Image(volume_pred_array, affine=np.eye(4)),
+                 filename=(nifti_path := npy_path.with_suffix(".nii.gz")),
+                 )
+
 
 def pred_and_save_masks_3d_stacked(
     saved_model_path,
@@ -773,6 +778,7 @@ def pred_and_save_masks_3d_simple(
             save_masks_dir / '{}.npy'.format(current_subject),
             pred
         )
+        nibabel.save(nibabel.Nifti1Image(pred, affine=np.eye(4)), filename=save_masks_dir / f'{current_subject}.nii.gz')
 
         del pred
         gc.collect()
@@ -944,4 +950,3 @@ def eval_3d_volumes_dv(
     Vessels Dice Coeff: {}; Dense Dice Coeff: {}""".format(
         val_loss, vessel_dice_loss, dense_dice_loss
     ))
-    
