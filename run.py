@@ -27,7 +27,7 @@ def preprocess_and_save_image_volume(subject_id, tcia_data_dir, mappings_filepat
     # There's also a subdir for every subject that contains the sequences
     # There is only one of these
     sub_dir = os.listdir(tcia_data_dir / subject_id)[0]
-    preprocessed_array_base_save_path = Path(f'{tcia_data_dir.parent / "preprocessed" / subject_id}')
+    preprocessed_array_base_save_path = Path(f'{tcia_data_dir.parent / f"inference_results_{datetime.datetime.utcnow()}" / "preprocessed" / subject_id}')
 
     if fpath_mapping_df is not None:
         sequence_dir = fpath_mapping_df.loc[
@@ -80,6 +80,7 @@ def preprocess_image_segmentations(subject_id, tcia_data_dir, fpath_mapping_df, 
     )
     return image_array, dicom_data, nrrd_breast_data, nrrd_dv_data
 
+
 def visualize(image_array, nrrd_breast_data, nrrd_dv_data):
     plt.subplot(2, 3, 1)
     plt.title('MRI Volume')
@@ -118,12 +119,16 @@ def display(subject_id, base_path):
 
 
 if __name__ == '__main__':
-    base_path = Path(r"D:\projects-data\mazurowski\manifest-1654812109500")
+
+    base_path_desktop = Path(r"D:\projects-data\mazurowski\manifest-1654812109500")
+    base_path_aero = Path(r"C:\Users\kshit\Projects\projects-data\mazurowski\data\Duke-Breast-Cancer-MRI\manifest-1654812109500")
+
+    base_path = base_path_aero
     xlsx_mappings_filepath = base_path / "Breast-Cancer-MRI-filepath_filename-mapping.xlsx"
     csv_mappings_filepath = base_path / "Breast-Cancer-MRI-filepath_filename-mapping.csv"
     tcia_data_dir = base_path / "Duke-Breast-Cancer-MRI"
 
-    subject_id = 'Breast_MRI_025'
+    subject_id = 'Breast_MRI_012'
 
     subject_dirpath = tcia_data_dir / subject_id
     volumes_dirpath = [item for item in subject_dirpath.iterdir() if item.is_dir()][0]
@@ -152,5 +157,4 @@ if __name__ == '__main__':
         input_mask_dir=str(breast_mask_save_path),
         save_masks_dir=str(dv_masks_save_path),
     )
-    display(subject_id)
-
+    # display(subject_id)
