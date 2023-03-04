@@ -1,6 +1,10 @@
 import os
+from typing import Optional, Union, Iterable
+
+import daiquiri
 import numpy as np
 import nrrd
+import torchio
 from torch.utils.data import Dataset
 from pathlib import Path
 import torch
@@ -22,6 +26,8 @@ import torchio as tio
 # Masks should be stored with the same file structure. There should be separate
 # upper level directories for breast and dense/vessels. 
 
+logger = daiquiri.getLogger(__name__)
+
 class _Dataset3DBase(Dataset):
     def __init__(
         self, 
@@ -30,7 +36,11 @@ class _Dataset3DBase(Dataset):
         additional_input_dir = None,
         transforms = None,
         one_hot_mask = False,
-        image_only = False
+        image_only = False,
+        overwrite=True,
+        save_masks_dir: Optional[Union[Path, str]] = None,
+        max_count: Optional[int] = None,
+        subject_id_allow_list: Optional[Iterable[str]] = None
     ):
         """
         This class converts 3D MRI volumes and segmentations into a 3D dataset.
@@ -63,7 +73,10 @@ class _Dataset3DBase(Dataset):
         self.transforms = transforms
         self.one_hot_mask = one_hot_mask
         self.image_only = image_only
-
+        self.overwrite = overwrite
+        self.save_masks_dir = save_masks_dir
+        self.max_count = max_count
+        self.subject_id_allow_list = subject_id_allow_list
         # To improve efficiency of dataset, all of the data will be loaded
         # into RAM. Otherwise it would be more complicated to load each
         # slice and provide them in batches to the model without having to
@@ -90,18 +103,32 @@ class _Dataset3DBase(Dataset):
         self.subject_id_list = [
             x.rstrip('.npy') for x in sorted(os.listdir(image_dir))
         ]
-
-        for subject_id in self.subject_id_list:
-            image_array = np.load(image_dir / '{}.npy'.format(subject_id))
+        if self.max_count:
+            subject_id_list = self.subject_id_list[: self.max_count]
+        else:
+            subject_id_list = self.subject_id_list
+        if self.subject_id_allow_list:
+            self.subject_id_list = sorted(set(self.subject_id_list).intersection(self.subject_id_allow_list))
+        for subject_id in subject_id_list:
+            logger.info("Subject: %s", subject_id)
+            if self.save_masks_dir and (Path(self.save_masks_dir, f'{subject_id}.npy')).exists() and self.overwrite is False:
+                logger.debug("%s exists. Not including in prediction dataset for loading", self.save_masks_dir / f'{subject_id}.npy')
+                continue
+            smri_filepath = image_dir / '{}.npy'.format(subject_id)
+            image_array = np.load(smri_filepath)
             self.image_array_list.append(image_array)
 
             if not self.image_only:
                 mask_array = np.load(mask_dir / '{}.npy'.format(subject_id))
+                # is image_array.shape != mask_array.shape:
+                #     torchio.Resize
                 self.mask_array_list.append(mask_array)
 
-                assert image_array.shape == mask_array.shape, \
-                    'Image array and mask array shape do not match: {}, {}'\
-                        .format(image_array.shape, mask_array.shape)
+                if image_array.shape != mask_array.shape:
+                    logger.error(
+                        'Skipping Image array and mask array shape do not match: {}, {}'.format(image_array.shape, mask_array.shape)
+                    )
+                    continue
 
             if additional_input_dir:
                 additional_input_array = np.load(
@@ -109,15 +136,17 @@ class _Dataset3DBase(Dataset):
                 )
                 self.additional_input_list.append(additional_input_array)
 
-                assert image_array.shape == additional_input_array.shape, \
-                    """Subject: {}
-                    Image array and addutional input array shape do not match: {}, {}"""\
+                if image_array.shape != additional_input_array.shape:
+                    logger.error(
+                        "Skipping Subject: {} Image array and addutional input array shape do not match: {}, {}"
                         .format(
                             subject_id,
                             image_array.shape, 
                             additional_input_array.shape
                         )
-
+                    )
+                    continue
+            logger.debug("%s array loaded in prediction dataset for loading", image_dir / '{}.npy'.format(subject_id))
             self.image_shape_list.append(image_array.shape)
 
         print('Loaded in {} MRI volumes and mask volumes'.format(
@@ -293,6 +322,10 @@ class Dataset3DSimple(_Dataset3DBase):
 
         # Get image and mask array based on indicies 
         image_array = np.expand_dims(self.image_array_list[i], axis=0)
+        # logger.warning("Overriding passed in transforms.")
+        # transforms = tio.Compose([
+        #     tio.Resize((144, 144, image_array.shape[-1]))
+        # ])
 
         if self.image_only:
             return transform_using_torchio_image_only(image_array, self.transforms)
@@ -489,7 +522,10 @@ class Dataset3DDivided(_Dataset3DBase):
         additional_input_dir = None,
         transforms = None,
         one_hot_mask = False,
-        image_only = False
+        image_only = False,
+        max_count = None,
+        subject_id_allow_list=None,
+
     ):
         """
         This class samples the full volume by sample an equal number of times
@@ -512,7 +548,9 @@ class Dataset3DDivided(_Dataset3DBase):
             additional_input_dir = additional_input_dir,
             transforms = transforms,
             one_hot_mask = one_hot_mask,
-            image_only = image_only
+            image_only = image_only,
+            max_count=max_count,
+            subject_id_allow_list=subject_id_allow_list,
         )
 
         self.input_dim = input_dim

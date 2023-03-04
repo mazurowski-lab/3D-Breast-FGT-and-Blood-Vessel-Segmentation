@@ -1,11 +1,14 @@
 import argparse
 from pathlib import Path
 
+import daiquiri
 import torchio as tio
 from unet import UNet3D
 
 from dataset_3d import Dataset3DSimple, Dataset3DDivided
 from model_utils import pred_and_save_masks_3d_simple, pred_and_save_masks_3d_divided
+
+logger = daiquiri.getLogger(__name__)
 
 
 # Performs predictions using a trained model.
@@ -43,7 +46,7 @@ def get_args():
     return parser.parse_args()
 
 
-def run(target_tissue, image_dir, input_mask_dir, save_masks_dir):
+def run(target_tissue, image_dir, input_mask_dir, save_masks_dir, max_count=None, subject_id_allow_list=None):
     model_dirpath = Path(__file__).parent / "trained_models"
 
     if target_tissue == 'breast':
@@ -77,38 +80,68 @@ def run(target_tissue, image_dir, input_mask_dir, save_masks_dir):
             image_dir = image_dir,
             mask_dir = None,
             transforms = transforms,
-            image_only = True
+            image_only = True,
+            save_masks_dir=save_masks_dir,
+            max_count=max_count,
+            subject_id_allow_list=subject_id_allow_list,
         )
+        logger.info("Inferring Breast mask.")
 
+        pred_and_save_masks_3d_simple(
+            saved_model_path=model_save_path,
+            dataset=dataset,
+            unet=unet,
+            n_classes=n_classes,
+            n_channels=n_channels,
+            save_masks_dir=save_masks_dir,
+            num_workers=0,  # Multiprocessing sometimes reveals unpickling error.
+        )
     else:
+        input_dim = (144, 144, 96)
 
         x_y_divisions = 8
         z_division = 3
 
         transforms = tio.Compose([
+            tio.Resize(input_dim)
         ])
 
         dataset = Dataset3DDivided(
             image_dir = image_dir,
-            mask_dir = input_mask_dir,
+            mask_dir = None,
             additional_input_dir = input_mask_dir,
             input_dim = 96,
             x_y_divisions = x_y_divisions,
             z_division = z_division,
             transforms = transforms,
             one_hot_mask = True,
-            image_only = False
+            image_only = True,
+            max_count = max_count,
+            subject_id_allow_list=subject_id_allow_list,
+
         )
+        logger.info("Inferring FGT & DV mask.")
 
-    pred_and_save_masks_3d_simple(
-        saved_model_path=model_save_path,
-        dataset=dataset,
-        unet=unet,
-        n_classes=n_classes,
-        n_channels=n_channels,
-        save_masks_dir=save_masks_dir,
-    )
+        # pred_and_save_masks_3d_simple(
+        #     saved_model_path=model_save_path,
+        #     dataset=dataset,
+        #     unet=unet,
+        #     n_classes=n_classes,
+        #     n_channels=n_channels,
+        #     save_masks_dir=save_masks_dir,
+        #     num_workers=0,  # Multiprocessing sometimes reveals unpickling error.
+        # )
 
+        pred_and_save_masks_3d_divided(
+            saved_model_path=model_save_path,
+            dataset=dataset,
+            unet=unet,
+            n_classes=n_classes,
+            # n_channels=n_channels,
+            save_masks_dir=save_masks_dir,
+            num_workers=0,
+        )
+    logger.info("Masks saved at %s", save_masks_dir)
     return save_masks_dir
 
 

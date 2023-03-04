@@ -1,5 +1,8 @@
 import os
 
+import daiquiri
+import torchvision.transforms
+
 import nibabel
 from torch.utils.data import DataLoader
 import torch
@@ -15,6 +18,9 @@ from losses import dice_coeff
 import torchio as tio
 
 import gc
+
+logger = daiquiri.getLogger(__name__)
+
 
 def pred_and_save_masks_2d(
     model,
@@ -417,10 +423,10 @@ def pred_and_save_masks_3d_divided(
 
         # Get preds
         image = batch['image']
-        mask = batch['mask']
-
         image = image.to(device, dtype=torch.float32)
-        mask = mask.to(device, dtype=torch.float32)
+        mask = batch.get('mask')
+        if mask:
+            mask = mask.to(device, dtype=torch.float32)
 
         with torch.no_grad():
             pred = unet(image)
@@ -451,6 +457,10 @@ def pred_and_save_masks_3d_divided(
                 z_index:z_index + dataset.input_dim
             ] = pred
         else:
+            # upsizer = torchvision.transforms.Resize(size=(x_length, y_length))
+            # pred_tensor = torch.as_tensor(pred).squeeze()
+            # current_pred_array = torch.stack([upsizer(pred_tensor[0, ...]) for channel_dim in range(3)], dim=0)
+
             current_pred_array = np.empty(
                 (n_classes, x_length, y_length, z_length, 1), dtype=np.half
             )
@@ -737,13 +747,14 @@ def pred_and_save_masks_3d_simple(
         dataset,
         batch_size = 1, 
         shuffle = False,
-        num_workers = num_workers
+        num_workers = num_workers,
     )
 
     print('Predicting Masks...')
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
 
-        current_subject = dataset.subject_id_list[0]
+        current_subject = dataset.subject_id_list[i]
+        # current_subject = dataset.subject_id_list[0]
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_shape_list[0]
 
