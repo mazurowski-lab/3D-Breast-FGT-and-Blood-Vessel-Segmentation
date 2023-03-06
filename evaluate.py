@@ -41,5 +41,4 @@ if __name__ == '__main__':
             args.predicted_mask_dir
         )
     else:
-        print('Target tissue must either be breast or dv')
-        raise
+        raise ValueError('Target tissue must either be breast or dv')
