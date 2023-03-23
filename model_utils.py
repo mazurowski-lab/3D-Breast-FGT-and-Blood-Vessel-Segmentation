@@ -419,10 +419,10 @@ def pred_and_save_masks_3d_divided(
 
         # Get preds
         image = batch['image']
-        mask = batch['mask']
+        # mask = batch['mask']
 
         image = image.to(device, dtype=torch.float32)
-        mask = mask.to(device, dtype=torch.float32)
+        # mask = mask.to(device, dtype=torch.float32)
 
         with torch.no_grad():
             pred = unet(image)

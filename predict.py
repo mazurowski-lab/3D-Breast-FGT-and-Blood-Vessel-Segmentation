@@ -103,7 +103,7 @@ if __name__ == '__main__':
             image_only = True
         )
 
-        pred_and_save_masks_3d_simple(
+        pred_and_save_masks_3d_divided(
             unet,
             args.model_save_path,
             dataset,
