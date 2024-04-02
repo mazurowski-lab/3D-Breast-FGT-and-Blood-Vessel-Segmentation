@@ -76,11 +76,12 @@ if __name__ == '__main__':
         )
 
         pred_and_save_masks_3d_simple(
-            unet,
-            args.model_save_path,
-            dataset,
-            n_classes,
-            args.save_masks_dir
+            unet = unet,
+            saved_model_path = args.model_save_path,
+            dataset = dataset,
+            n_classes = n_classes,
+            n_channels = n_channels,
+            save_masks_dir = args.save_masks_dir
         )
 
     else:
